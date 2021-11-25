@@ -1,0 +1,458 @@
+
+
+
+
+BEYOND RAID
+
+-----------------------------------
+New REL bug insights, and a DOS fix
+-----------------------------------
+
+
+by George Hug
+
+The management of relative files under Commodore DOS continues to
+be a source of frustration. Virulent REL bugs still inhabit the
+latest drive ROMs - the 1541-II, the 1571 upgrade ROMs (rev. 5),
+and DOS 3.1 in the 128D. Even the 1581, which claims immunity,
+retains one infectious strain.
+
+Previous descriptions of the feeding habits of these bugs, along
+with the "Raid" bug sprays offered as protection, need further
+refinement so as to eliminate the last of those mysterious crashes
+and corrupted files. Presented here is new information on the
+specific causes and effects of the bugs, together with an updated
+avoidance algorithm. For those with EPROM burners, there are also
+changes to the 1541/71/81 ROMs which will exterminate the bugs.
+
+
+It's All Relative
+
+The data section of a relative file looks identical to a
+sequential file. The first two bytes of each block point to the
+next block, and the remaining 254 bytes contain data. However, the
+file as a whole is logically divided into records, all of which
+are fixed at the same length when the file is created. One may
+access (i.e. - read or write) records at random by first pointing
+to each selected record via the command channel. One may also
+access records in strict sequence, without pointing, using
+successive reads or writes. Since a record may cross the boundary
+between two disk sectors, DOS assigns two of its RAM buffers to
+service the data sectors of a relative file. If the proper sectors
+are in the buffers, DOS has access to both portions of a "split"
+record.
+
+A record may be only partially filled with data, in which case the
+rest of that record will be filled with nulls. DOS assumes that
+the last non-null byte in a record is the last genuine data byte.
+If asked to read past that point, it will jump directly to the
+first byte of the next record. Similarly, if a write does not fill
+a record, DOS automatically provides the null fill.
+
+With small record lengths, a single disk sector may contain a
+large number of records. To avoid repeated re-writes of the same
+sector, DOS waits until it is about to leave a buffer to update
+
+
+
+G. Hug, "Beyond Raid", page 1 of 7.
+
+
+
+
+
+
+
+
+
+
+
+
+the hard copy on disk. Prior to that time, all accesses to records
+within that buffer, whether reads or writes, involve only the
+buffer. If even one such access is a write, the buffer is flagged
+as "dirty", which means that its contents now differ from the hard
+copy. A dirty buffer is written to disk (a) as part of a point to
+a record not in that buffer, (b) in the process of accessing a
+split record, or (c) when the file is closed.
+
+
+The Major Bug
+
+The most destructive relative file bug can corrupt several records
+at a time. Consider any three consecutive sectors - A, B, and C -
+of a relative file. Suppose that the split record spanning sectors
+A and B is accessed when the sector A buffer is dirty, possibly
+followed by any number of accesses to records lying wholly within
+sector B. If one then points and writes to a record which begins
+in sector C, the new data will not go to sector C, but rather to
+sector A, thus corrupting the file. If the access to the sector C
+record is a read, DOS will read from sector A instead of sector C.
+
+The physical byte position within sector A where DOS begins to
+read or write is the position where it should begin within sector
+C. In sector A, however, that point may fall in the middle of a
+record. So a write to C (including null fill) will tend to corrupt
+three records - two that are partially overwritten in sector A,
+and the record in sector C which never received the new data.
+Similarly, a read may begin in the middle of data or somewhere in
+the null fill area.
+
+This "major" bug cannot occur in strict sequential access of the
+file. An access to the record which spans sectors B and C will
+cancel the bug previously set up with respect to sector C (but if
+B is dirty, it will set up a new one for sector D). Therefore, the
+B/C split record must be skipped over, via a point command, for
+the bug to strike in sector C. Accessing a record which ends
+exactly at the end of sector B has the same effect as accessing a
+B/C split record. DOS treats all such records as split even though
+they do not physically span two sectors. To be precise then, a
+record is "split" if that record and the one following it begin in
+different sectors. Thus if the record length is 127, all
+even-numbered records are split records.
+
+
+The Minor Bug
+
+Somewhat less destructive is the bug which points to the wrong
+byte as the end of data in a split record. To determine where the
+data ends and the null fill begins, DOS starts at the very end of
+the record and searches backward for the first non-null byte. When
+
+
+
+G. Hug, "Beyond Raid", page 2 of 7.
+
+
+
+
+
+
+
+
+
+
+
+
+the record is split, DOS must begin its search in the sector
+buffer which contains the end of the record. The "minor" bug
+occurs when DOS looks at the wrong sector to begin that search.
+
+The minor bug is set up in the same manner as the major bug - an
+access of the A/B split record when A is dirty, possibly followed
+by any number of accesses to records wholly within sector B. If
+one then reads the B/C split record, DOS will go to sector A,
+rather than C, to begin its backward search for the end of data.
+Oddly enough, the actual read of the data in the forward direction
+correctly fetches data from sector C, but the end-of-data pointer,
+which determines how much of that data will be forthcoming, has
+already been set incorrectly. As a result, the read may be
+truncated, or have extra nulls tacked onto the end. The minor bug
+can occur during strict sequential access of the file, provided at
+least one of those accesses is a write.
+
+
+A Pound of Prevention
+
+Certain patterns of relative file access are immune to the bugs.
+If, for example, all accesses are reads, regardless of order, then
+the bugs will not occur because no buffer will ever become dirty.
+If all accesses are strictly sequential writes, then the major bug
+will not occur because the access is sequential, and the minor bug
+is irrelevant because it only affects reads. Finally, if there are
+no nulls in a file, either as data or as fill, that file will be
+immune to the minor bug. Absent such immunity, special procedures
+must be adopted to prevent the bugs from striking.
+
+Both bugs require, as a setup, the accessing of an A/B split
+record when the sector A buffer is dirty. That access may be a
+write, which automatically makes the A buffer dirty, or it may be
+a read if the A buffer is dirty from an earlier write.
+Fortunately, the bug setup can be cancelled by pointing back to
+the split record after accessing it. That would call for a
+point/read/point or a point/write/point sequence for all split
+records. A record is split if ((r*s)mod254)<s, where r is the
+record number, and s (for "size") is the record length. In Basic,
+(r*s)mod254 is calculated as r*s-int(r*s/254)*254. For those using
+ML, the subroutine shown as Program 1 can be called instead. It
+executes in about one-half millisecond, and returns with the carry
+flag clear if the record is split.
+
+The major bug can also be avoided by pointing twice to the sector
+C record before accessing it. Keeping track of that record might
+be cumbersome, however, because of the sector B accesses which may
+intervene between the setup and the strike. A more critical
+shortcoming of that method is its failure to prevent the minor
+bug.
+
+
+
+G. Hug, "Beyond Raid", page 3 of 7.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Demonstration Programs
+
+Program 2 demonstrates the major bug and the point/access/point
+fix. It is structured to permit further experimentation by the
+reader. The program begins by opening a relative file with the
+record length and number of records specified in line 120. It then
+writes the STR$ of the record number to each record, after which
+it "dumps" the entire file, showing for each record its nominal
+and actual contents (lines 160-180). The accesses specified in
+line 360 are then executed (190-260), each preceded by one point.
+The string for each write is equal to the current nominal contents
+of the record plus one asterisk. For a read, the program prints
+the nominal contents of the record, followed by the actual results
+of the read. After the line-360 accesses are completed, a second
+dump of the file is performed. Read errors will show up during
+access execution, and write errors will be revealed by the second
+dump. Here is the output of the program (s=127):
+
+rec#      nominal   actual
+ 1         1         1
+ 2         2         2
+ 3         3         3
+ 4         4         4
+ 5         5         5
+ 6         6         6
+ 7         7         7
+ 8         8         8
+
+w1         1*
+r2         2         2
+r5         5         1*
+w4         4*
+w7         7*
+
+rec#      nominal   actual
+ 1         1*        1*
+ 2         2         2
+ 3         3         7*
+ 4         4*        4*
+ 5         5         5
+ 6         6         6
+ 7         7*        7
+ 8         8         8
+
+The record length of 127 was chosen because the records are
+located at identical points in every sector, which makes it easy
+to see how the bug works. The write to record 1 dirties sector A.
+Reading record 2 (an A/B split record) sets up the bug, which then
+
+
+
+G. Hug, "Beyond Raid", page 4 of 7.
+
+
+
+
+
+
+
+
+
+
+
+
+strikes when record 5 (sector C) is read. The write to record 4
+can be considered a write to an A/B split record, which sets up a
+strike for the write of record 7 in sector C (remember that the
+labels A, B, and C refer to any three consecutive sectors). The
+recommended fix is enabled by removing the rem from line 250.
+
+Program 3 demonstrates the minor bug. With a record length of 126,
+records 3, 5 and 7 are split. After a nine-character string is
+written to each record, record 5 has four characters in sector B,
+and five characters plus 117 nulls in sector C. The program
+triggers the bug by simply writing z$ (line 180) to record 1 and
+then reading the remaining records in sequence. For screen output,
+a null is represented by "@".
+
+With z$ = "12", the program will read record 5 as "123456", but
+changing z$ to "123456789" will make record 5 read
+"123456789@@@@". Record 5 actually contains "123456789". Even
+though the data is taken correctly from sector C, the pointer to
+the last data item has been calculated based on the contents of
+sector A. Removing the rem from line 210 will enable two advance
+points, which have no effect on the bug. The preferred fix is
+enabled by removing the rem from line 230.
+
+
+Finding the Nest
+
+In the 1541/71-series drives, there is a routine at $e03c which is
+called during the access of a split record. If the current buffer
+(containing sector A) is not dirty, the routine loads sector B
+into the other buffer (if it is not already there), and then loads
+sector C into the buffer that previously contained sector A. If,
+on the other hand, the sector A buffer is dirty, the routine first
+writes the A buffer contents to sector A on the disk, then loads
+sector B into the other buffer (if it is not already there). And
+then it stops. So upon exit, the buffers contain sectors B and C
+if the A buffer was clean, but sectors B and A if it was dirty.
+
+It appears that the failure to load sector C into the buffer sets
+up both bugs. In addition, a portion of the point routine
+beginning at $e29c does not always recognize, on the first attempt
+at least, that sector C needs to be loaded into a buffer.
+
+
+Fixing DOS
+
+Given the prevalence of the REL bugs in Commodore drives, any
+software written for general use should rely on the
+point/access/point technique described above. Those seeking
+protection from software which does not use that technique may
+also wish to modify their drive ROMs. While the changes shown
+
+
+
+G. Hug, "Beyond Raid", page 5 of 7.
+
+
+
+
+
+
+
+
+
+
+
+
+below seem to work, you proceed, as usual, at your own risk.
+
+For 1541/71-series drives, the fix for the $e29c point routine is:
+
+e2b4 20 1e cf  jsr $cf1e
+e2b7 20 d0 e2  jsr $e2d0
+e2ba d0 06     bne $e2c2
+e2bc 20 0c de  jsr $de0c
+e2bf 4c 6e e0  jmp $e06e
+
+The equivalent fix is found in the MSD-2 dual drives and in the
+1581. It avoids the major bug by making sure that on each point
+the buffers contain both the current sector and the one following
+it.
+
+The fix for the $e03c routine is:
+
+e055 d0 14     bne $e06b
+
+e05a 4c 68 e0  jmp $e068
+
+I am not aware of a precedent for this fix, which causes the
+buffers to contain sectors B and C upon exit, whether the A buffer
+was dirty or not. This fix alone may cure both bugs, but the fix
+to the point routine should be made in any case.
+
+The 1581 DOS attempts to correct the minor bug by setting a flag
+each time $e03c ($9fbf in the 1581) is called. That flag is tested
+in the point routine, and if it is set, the buffers are loaded
+from scratch, just in case. Unfortunately, one call of $e03c/9fbf,
+from $dfd0/9f4c, was overlooked and has no flag-setting patch.
+Furthermore, since testing of the flag occurs only during a point,
+sequential access without pointing is still subject to the minor
+bug. Program 3 demonstrates the minor bug in the 1581, but the bug
+can be prevented by using even one of the points in line 210.
+Owners of 1581s may wish to try the following ROM change:
+
+9fd5 d0 14     bne $9feb
+
+9fda 4c e8 9f  jmp $9fe8
+
+With these changes, the ROM will no longer pass its power-up
+checksum test. The easiest solution is simply to disable the test:
+
+-1541-
+eae2 e6 6f     inc $6f
+eae4 a2 c0     ldx #$c0
+
+-1571-
+eae5 d0 03     bne $eaea
+
+
+
+G. Hug, "Beyond Raid", page 6 of 7.
+
+
+
+
+
+
+
+
+
+
+
+
+
+-1581-
+af8b d0 00     bne $af8d
+
+
+Other REL Errors
+
+The bugs listed below are alledged to inhabit REL files. I am
+unable to confirm any of them. Perhaps someone can provide
+demonstration programs.
+
+1. One must "wait", or read the error channel, after pointing.
+
+2. A file cannot be opened using the record lengths 42, 58, or 63.
+
+3. Unspecified problems occur when the relative file data occupies
+less than one full sector.
+
+4. When pointing, the secondary address should be ORed with $60
+(96).
+
+5. The values $FF and $00 cannot be used as data bytes in a
+relative file.
+
+
+References
+
+Those interested in earlier REL bug analyses may wish to review
+the articles listed below. Of particular importance is the
+pioneering work of David Shiloh on the major bug.
+
+1. George W. Miller, "Relative Files: Speed and Economy." and Todd
+Heimarck, "The Controversy Over Relative Files." Compute!'s
+Gazette. June, 1985.
+
+2. Richard Evers, "Transcribe 64." Transactor. September, 1986
+(v7/i2).
+
+3. David Shiloh, "Shiloh's Raid: 1541 Relative File Bug Spray."
+Transactor. January, 1987 (v7/i4).
+
+4. Jim Butterfield, "Commodore Relative Files: Defensive
+Programming." Compute!'s Gazette. August, 1987.
+
+5. The Editors, "Olsen's Raid." Transactor. May, 1988 (v8/i6).
+
+
+
+
+
+
+
+
+G. Hug, "Beyond Raid", page 7 of 7.
+
+
+
+

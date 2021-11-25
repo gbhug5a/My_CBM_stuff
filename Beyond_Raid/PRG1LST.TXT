@@ -1,0 +1,46 @@
+
+
+
+
+Program 1: Split record identifier routine.
+
+1100  ; "split.src"
+1110  ;  set up rnum and size. jsr split.
+1120  ;  returns with carry clear if split.
+1130          ;fill in the locations you want:
+1140  rnum    =$xxxx       ;record num. lo/hi
+1150  size    =$xxxx       ;record length
+1160  temp    =$xxxx       ;work memory lo/hi
+1170  *       =$xxxx       ;(relocatable)
+1180  ;
+1190  split   lda rnum
+1200          sta temp
+1210          lda rnum+1
+1220          sta temp+1
+1230          ldx #17
+1240          lda #0
+1250          beq shift2
+1260  mloop   bcc shift
+1270          clc
+1280          adc size
+1290  shift   ror
+1300  shift2  ror temp+1
+1310          ror temp
+1320          dex
+1330          bne mloop
+1340          inx
+1350  sloop   asl
+1360          bcc addnxt
+1370  bump    adc #1
+1380          bcs bump
+1390  addnxt  adc temp,x
+1400          bcc chkx
+1410  bump2   adc #1
+1420          bcs bump2
+1430  chkx    dex
+1440          bpl sloop
+1450          cmp #254
+1460          bcc test
+1470          sbc #254
+1480  test    cmp size
+1490          rts

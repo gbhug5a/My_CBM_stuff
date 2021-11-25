@@ -1,0 +1,28 @@
+100 rem ** major bug demo - c64/128  **
+110 rem ** 1541 & 1571 series drives **
+120 print: s=127: n=8: rem 0<n<256
+130 f$="0:test"+str$(s)+",l,"+chr$(s)
+140 open15,8,15: open2,8,2,f$
+150 r=n: gosub300: print#2,chr$(255);
+160 r=1: gosub300: forr=1ton
+170 a$(r)=str$(r): print#2,a$(r);
+180 next: gosub270: print
+190 readc$: ifc$<>"999"then210
+200 print: gosub270: close2: close15: end
+210 ac$=left$(c$,1): r=val(mid$(c$,2))
+220 printc$,: gosub300: ifac$="w"then240
+230 printa$(r),: gosub320: printb$: goto250
+240 a$(r)=a$(r)+"*": print#2,a$(r);: printa$(r)
+250 rem ifr*s-int(r*s/254)*254<sthengosub310
+260 goto190
+270 print"rec#","nominal","actual"
+280 r=1: gosub300: forr=1ton: gosub320
+290 printr,a$(r),b$: next: return
+300 p$="p"+chr$(2)+chr$(r)+chr$(0)+chr$(1)
+310 print#15,p$;: return
+320 b$=""
+330 get#2,d$: ifd$=""ord$=chr$(0)thend$="@"
+340 b$=b$+d$: ifst=0then330
+350 return
+360 data w1,r2,r5,w4,w7
+999 data 999

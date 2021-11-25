@@ -1,0 +1,184 @@
+REL file bugs - Addendum re Program 1 ML code
+
+Careful readers will note that I did not comment or document
+the ML code in Program 1 in the article.  Last night I found
+my notes on that code, along with some correspondence at the
+time with Anton Treuenfels in which I tried to explain it.
+
+Just to finish this up and put this thing finally to bed
+from my end, I'll try to explain what the code does.  It's
+only of interest in the computational sense.  I may have
+arrived at these routines on my own, but I think it's more
+likely that I ran across them somewhere, perhaps in the
+drive ROMs where the same calculations are required.
+
+
+What to calculate:
+
+Well, remember that in order to take evasive action against
+the bugs without spending all our time on multiple points,
+we need to know if the current record is a split record,
+since split records are the only ones requiring special
+handling.  For bug purposes, split records include those
+which end exactly at the end of a disk sector as well as
+those which actually span two sectors.
+
+If you multiply the record number times the record length,
+and then divide that by 254, the remainder of that division
+will be the point where that record ends within the 254-byte
+disk sector.  If that remainder is less than the record
+length, then part of that record must also lie in the
+previous sector, and the record is therefore split.  (If the
+remainder is zero, then the record ends exactly at the end
+of the sector, but that's still a split record for bug
+purposes, so the test of [remainder < reclength] still
+works.)
+
+If N is the record number, and L is the length of each
+record, then in mathematical terms:
+
+If ((N*L) mod 254) < L then it's a split record.
+
+Modulo is just math jargon for the remainder of the division
+by 254.  Since there is no MOD function in the versions of
+CBM BASIC I'm familiar with, we end up with something like
+this:
+
+if N*L - int(N*L/254)*254 < L then it's a split record
+
+Program 1 contains code for doing that calculation in ML.
+
+
+Efficient multiplication:
+
+Lines 1190 through 1340 are just the N*L computation.  The
+two-byte record number is multiplied by the single-byte
+record length, and the product is found in three bytes
+consisting of the Accumulator (MSB), Temp+1, and Temp (LSB).
+
+The Temp values are initialized to equal the record number,
+and the Acc is zeroed.  Then, the bits of Temp and Temp+1
+multiplicand are right-shifted one at a time.  If the
+resulting CF is set then Rlen is added to the Acc, and then,
+in any case, the CF and the three bytes of the product are
+then shifted right.
+
+Note however that the two-byte value at Temp serves to hold
+both the multiplicand and the two low-order bytes of the
+product.  As the bits of the multiplicand are shifted out to
+the right through the ROR instructions, the bits of the
+product are are shifted into the same bytes from the left,
+all in one operation.
+
+I think this is a pretty efficient algorithm for two bytes
+times one byte.
+
+
+MOD 254:
+
+While mod 254 calculations are not easy in binary, mod 256
+operations are.   Rather than divide the product by 254 to
+obtain the remainder, we make use of the fact that mod 254
+and mod 256 are conveniently related.  As a first
+approximation in a simple case:
+
+X mod 254 = (X mod 256) + 2*int(X/256)
+
+This is convenient because (X mod 256) is just the least
+significant byte of X, and int(x/256) is just the most
+significant byte of X, and the "2*" can be done by just
+shifting left.  For example:
+
+$1234 mod $fe = $34 + (2 * $12)
+              = $58
+
+However, if a shift or addition produces a carry, then
+things become more complicated.  In such cases, each result
+must first be further "resolved" as follows:  add 2 to the
+result;  if that also produces a carry, add 2 again.  And if
+there are more than two bytes on the left side, the bytes
+must be processed sequentially.
+
+The algorithm found in lines 1350 - 1470 processes the three
+bytes of the product one at a time to produce the mod 254
+value, beginning with the MSB already in the Acc, as
+follows:
+
+AAA  multiply Acc by 2. If CF set, resolve the result.
+
+     add the next MSB.  If CF set, resolve the result.
+
+     if there are more bytes to process, go to AAA
+
+     if the result is => 254, subtract 254.
+
+Resolving takes into account the fact that for every carry
+or overflow, the mod 254 and mod 256 values are off by
+another 2 which must be adjusted for.
+
+I think this process is a lot faster than a full-blown
+division by 254.
+
+
+The rest:
+
+The the last step is just to compare the mod value to the
+record length.  If it's less, then the CF will be cleared,
+and that means the record is split.
+
+
+The only absolute references in the code are to the storage
+locations for the working values, so the code itself can be
+moved anywhere without having to reassemble it.  In other
+words, there are no JMPs or JSRs, just branches.
+
+
+I should also say that I'm not absolutely sure about the mod
+calculation, but it worked in every example I tried.
+
+
+Here's the code again, with comments:
+
+
+1100  ; "split.src"
+1110  ;  set up rnum and size. jsr split.
+1120  ;  returns with carry clear if split.
+1130          ;fill in the locations you want:
+1140  rnum    =$xxxx       ;record num. lo/hi
+1150  size    =$xxxx       ;record length
+1160  temp    =$xxxx       ;work memory lo/hi
+1170  *       =$xxxx       ;(relocatable)
+1180  ;
+1190  split   lda rnum     ;init temp with rnum
+1200          sta temp
+1210          lda rnum+1
+1220          sta temp+1
+1230          ldx #17      ;set count for shifting
+1240          lda #0       ;init Acc to 0 - MSB of product
+1250          beq shift2   ;shift out low bit to start
+1260  mloop   bcc shift    ;was shifted out bit a 1?
+1270          clc          ;yes
+1280          adc size     ;add size before next shift
+1290  shift   ror          ;shift everything to the right
+1300  shift2  ror temp+1
+1310          ror temp
+1320          dex
+1330          bne mloop    ;loop till all bits processed
+1340          inx          ;x = 1.  now do mod calculation
+1350  sloop   asl          ;multiply Acc by 2
+1360          bcc addnxt
+1370  bump    adc #1       ;resolve - add 2 (CF already set)
+1380          bcs bump     ;resolve again till CF = 0
+1390  addnxt  adc temp,x   ;add next byte of product
+1400          bcc chkx
+1410  bump2   adc #1       ;resolve this too, same way
+1420          bcs bump2
+1430  chkx    dex
+1440          bpl sloop    ;loop till all bytes processed
+1450          cmp #254     ;if =>254, subtract 254
+1460          bcc test
+1470          sbc #254
+1480  test    cmp size     ;comp to record length
+1490          rts          ;CF cleared if record split
+
+

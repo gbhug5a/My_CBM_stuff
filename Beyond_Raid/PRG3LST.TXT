@@ -1,0 +1,22 @@
+100 rem ** minor bug demo - c64/128 **
+110 rem ** 1541/71/81 series drives **
+120 print: s=126: n=8: rem 0<n<256
+130 f$="0:test"+str$(s)+",l,"+chr$(s)
+140 open15,8,15: open2,8,2,f$
+150 r=n: gosub250: print#2,chr$(255);
+160 a$="123456789": r=1: gosub250
+170 forr=1ton: print#2,a$;: next
+180 z$="12"
+190 r=1: gosub250: print#2,z$;
+200 forr=2ton
+210 rem gosub250: gosub250
+220 gosub280: printr,b$
+230 rem ifr*s-int(r*s/254)*254<sthengosub270
+240 next: close2: close15: end
+250 p$="p"+chr$(2)+chr$(r)+chr$(0)+chr$(1)
+260 print#15,p$;: return
+270 gosub250
+280 b$=""
+290 get#2,d$: ifd$=""ord$=chr$(0)thend$="@"
+300 b$=b$+d$: ifst=0then290
+310 return
