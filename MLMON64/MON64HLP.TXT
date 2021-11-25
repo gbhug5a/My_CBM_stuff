@@ -1,0 +1,321 @@
+
+
+
+
+
+                             MONITOR INSTRUCTIONS
+                                     C-64
+
+
+
+        MONITOR is a utility program which permits direct examination and
+manipulation of the contents of the computer's memory, including the assembly,
+disassembly and execution of machine language programs.  Once booted, MONITOR
+remains in memory, and can be re-entered from BASIC with a simple SYS command.
+
+
+
+BOOTING MONITOR:
+
+        To boot MONITOR, first LOAD"MLMON64",8 and then RUN.  You will be
+asked to specify the beginning hex page number of the memory range where
+MONITOR is to reside.  You may pick any page from 08 through C8, but some
+choices may be better than others for a particular purpose:
+
+  08     TXTTAB pointer (2B/2C) moved to end of MONITOR. Uses up BASIC space.
+  09-7F  BASIC pointers not changed. MONITOR not protected from BASIC.
+  80-9F  MEMSIZ pointer (37/38) moved to start of MONITOR. Uses up BASIC space.
+  A0-B8  MONITOR in RAM under BASIC ROM. Protected from BASIC, WEDGE, etc.
+  B9-C8  Protected from BASIC, but not WEDGE or other programs using C000-CFFF.
+
+        MONITOR then relocates itself to the selected range, prints "MONITOR"
+and the current stack pointer value, and waits for a command.  This is
+equivalent to "READY" in BASIC.
+
+
+
+MONITOR COMMANDS:
+
+        MONITOR's instruction set consists of 21 single-character commands,
+some of which are followed by addresses, other values, or characters.  All
+numerical values in a command are in hexadecimal, without the leading "$".
+Values may range from 0 through FFFF.  Leading zeros are not required.
+If more than four hex digits are typed, only the last four are used by MONITOR.
+
+        As used below, "XXXXadr" means a hex memory address, with the "XXXX"
+roughly describing which address is called for.  Where a comma appears, there
+must be one comma, or one or more spaces. Spaces otherwise are not significant.
+Items in brackets are optional. If an optional FROMadr is omitted, MONITOR will
+pick up where it left off.  
+
+
+SYS 2030
+
+    Enter MONITOR from BASIC. BASIC programs and pointers remain intact.
+    Displays "MONITOR" and the stack pointer value. Waits for the next command.
+
+
+X
+
+    Exit MONITOR, return to BASIC. BASIC displays "READY".
+
+
+
+
+
+
+
+
+                                      -2-
+
+
+:
+
+    Optional command line end mark. MONITOR ignores everything following the
+    colon, unless it is embedded in double quotes, as in "@0:TEMP".
+
+
+R
+
+    Register display. MONITOR reserves memory within its program space for
+    "phantom" processor registers, including the Program Counter, the seven
+    status flags, the A, X, and Y registers, and the Stack Pointer.
+    The R command displays the current values of the phantom registers.
+
+
+/ [PC] [,NVBDIZC] [,AR] [,XR] [,YR] [,SP]
+
+    Change the phantom registers to the values specified. "NVBDIZC" means the
+    status flags, each of which should be entered as a "0" or "1". The letters
+    stand for Negative, oVerflow, Break, Decimal, Interrupt, Zero, and Carry.
+    A "/" alone will clear the status flags, but not change the other phantoms.
+    For other changes, it is easier to do an R, then edit the line and RETURN.
+    Notice that R conveniently prints the "/" for you when it displays values.
+
+
+G [SBRadr]
+
+    Go to and execute the specified machine language routine. If SBRadr is
+    not given, MONITOR goes to the routine beginning at PC. Before execution
+    begins, all of the remaining phantom registers are downloaded into the
+    real ones, and the computer's memory banks are set to their "normal"
+    configuration. If the routine ends with an RTS instruction, MONITOR will
+    be re-entered in the same manner as SYS 2030, in which case only the
+    phantom SP is updated. If it ends with a BRK, the re-entry to MONITOR
+    causes a "BREAK" message to be printed, and the real register values when
+    the BRK occurred are copied into the phantom registers and displayed.
+    This feature is useful in debugging programs.
+
+
+M [FROMadr] [,THRUadr]
+
+    Memory display. MONITOR displays eight bytes of memory per screen line.
+    The address of the first byte is displayed, then the hex value of each of
+    the eight bytes, then the ASCII interpretation of those bytes (in REVERSE
+    to the screen, normal to the printer). A "." is substituted if the ASCII
+    character is a control or non-printable character. If THRUadr is omitted,
+    MONITOR will do 12 lines of memory.
+
+
+= BEGadr,VAL,VAL,VAL,...,VAL
+= BEGadr,'CCC...C
+= [BEGadr]
+
+    Poke the specified VALues or Characters into memory and display the
+    resulting lines in M format. The VALs are normal hex values, except that
+    a VAL having more than two hex digits will be poked as two bytes, low-order
+    byte first. Do not use a closing quote when poking Characters. A colon may
+
+
+
+
+
+
+
+                                      -3-
+
+
+    be needed if the Characters are spaces because the screen editor ignores
+    trailing spaces. The number of VALs or Cs is limited only by the number
+    you can fit on an input line of 88 characters. Without VALs or Cs, the "="
+    command will display one line of memory (8 bytes). You can edit byte values
+    in previously printed lines just as in the "/" command. The "=" is provided
+    by the M display, and a colon precedes the REVERSE field.
+
+
+T FROMadr,THRUadr,TOadr
+
+    Transfer a range of memory to a new range. FROMadr and THRUadr are the
+    bottom and top of the source range. TOadr is the bottom of the destination
+    range (the top is calculated by MONITOR). You can transfer up or down,
+    and MONITOR correctly handles overlapping ranges.
+
+
+C FROMadr,THRUadr,WITHadr
+
+    Compare two ranges of memory. WITHadr is the bottom of the second range.
+    The ranges are compared byte by byte, and the address of any non-matching
+    byte is displayed.
+
+
+H FROMadr,THRUadr,VAL,VAL,VAL,...,VAL
+H FROMadr,THRUadr,'CCC...C
+
+    Hunt for the occurrence of the VALues or Characters specified within the
+    range specified. The address of each occurrence is displayed.
+
+
+F FROMadr,THRUadr,Byte
+
+    Fill the memory range with the Byte specified. Byte may be 0 through FF.
+
+
+D [FROMadr] [,THRUadr]
+
+    Disassemble. MONITOR tries to interpret memory as machine language code,
+    and displays the address, the hex value of the bytes, and the corresponding
+    assembly language instruction. An illegal instruction produces "???",
+    which means that the memory contains something other than ML code.
+    If THRUadr is omitted, MONITOR will disassemble 20 bytes of memory.
+
+
+A BEGadr,INSTRUCTION   or
+. BEGadr,INSTRUCTION
+
+    Assemble the specified assembly language INSTRUCTION into machine
+    language and poke the resulting code into memory. After assembly of a
+    line, MONITOR goes to the next line, prints an "A" and the proper address
+    for the next INSTRUCTION, and waits for you to type it in. If you want to
+    quit, just hit RETURN. You can also edit lines displayed by D or A.
+    (After reading BEGadr, MONITOR ignores everything until it finds three
+    non-space characters in a row. The byte values are always two characters.)
+    The format of an INSTRUCTION is special in that any numerical value which
+    follows the opcode (1) must be preceded by a "$", and (2) must be either
+
+
+
+
+
+
+
+                                      -4-
+
+
+    two or four hex digits long. The best guide to INSTRUCTION format is the
+    displays produced by the D command. (A space after the opcode is optional.)
+
+
+L "filename",device# [,RELOadr]
+
+    Load a file into memory. If RELOadr is used, the file will be loaded into
+    memory beginning at RELOadr. Otherwise, the file will load at the address
+    from which it was saved.
+
+
+S "filename",device#,FROMadr,TOadr
+
+    Save a range of memory. TOadr is the end of the range plus one.
+
+
+V "filename",device# [,RELOadr]
+
+    Verify a file by comparing it to memory. "ERROR" on mismatch.
+
+
+P
+
+    Send all MONITOR output to the printer. This is useful for M or D listings.
+    The printer is turned on with the equivalent of BASIC's OPEN4,4,0:CMD4
+    command. If you need lower case printing, first OPEN4,4,7:CMD4 in BASIC,
+    then enter MONITOR. To advance the paper while P is in effect, cursor to a
+    blank line and hold down RETURN.
+
+
+N
+
+    Normal output status. Returns output to the screen. Closes any open files.
+
+
+$
+
+    Displays the disk directory. The SHIFT or SHIFT LOCK key will temporarily
+    halt the listing. File size and remaining disk memory are displayed in hex.
+
+
+*
+* "disk command"
+
+    The "*" alone is used to read the disk error channel. If a disk command
+    follows the "*", then the command inside the quotes is sent to the disk
+    drive on the command channel. This is used for new, scratch, rename, etc.
+
+
+MEMORY MANAGEMENT:
+
+        Certain address ranges in the C-64 have multiple memory banks
+associated with them.  Bank selection for those ranges is determined by
+the values of the three low-order bits (bits 0-2) of memory location $0001.
+Generally, bit 0 controls $A000 - BFFF, bit 1 controls $E000 - FFFF, and
+bit 2 controls $D000 - DFFF, but the settings are interdependent to a degree.
+
+
+
+
+
+
+
+                                      -5-
+
+
+        So that you may have access to all of the memory banks, location $07FF
+is reserved as your "phantom" bank control register.  Just poke a number from
+the left column ("=7FF,7"), and the banks on that line will be "banked in".
+
+
+$7FF Value    Bit 2   Bit 1   Bit 0     A000-BFFF     D000-DFFF      E000-FFFF
+----------    -----   -----   -----     ---------     ---------      ----------
+    7 (Normal)  1       1       1       BASIC ROM     I/O Regs.      KERNAL ROM
+    6           1       1       0       RAM           I/O Regs.      KERNAL ROM
+    5           1       0       1       RAM           I/O Regs.      RAM
+    4,0         x       0       0       RAM           RAM            RAM
+    3           0       1       1       BASIC ROM     Char. ROM      KERNAL ROM
+    2           0       1       0       RAM           Char. ROM      KERNAL ROM
+    1           0       0       1       RAM           Char. ROM      RAM
+
+
+        MONITOR uses the value in $7FF only when fetching from memory.  It
+temporarily pokes that value into $0001, fetches a byte, then restores the
+$0001 value (6) needed for MONITOR's own operation.  A write to memory always
+"bleeds through" to any underlying RAM, so banks are not controlled for the
+Fill command, or for the destination range (TOadr) in Transfer.  The Compare
+instruction is a problem because it involves fetches from two memory ranges.
+MONITOR uses the $7FF value to control the FROMadr - THRUadr range, but the
+WITHadr range is always fetched as though $7FF = 6.  If this causes problems
+(false mismatches), try reversing the ranges in your command line.
+
+        MONITOR always Saves and Verifies as though $7FF = 6.  To Save the
+RAM under KERNAL ROM, you must first Transfer it somewhere else.  You cannot
+Go to an underlying RAM bank directly from MONITOR because MONITOR always
+presets $0001 to its "normal" value.  As a practical matter, the RAM at $D000
+is unusable for most purposes, primarily because MONITOR's memory writes end
+up writing to the I/O registers, with unpredictable results. (Your own ML
+programs can use that RAM with appropriate values in $0001.)
+
+
+
+OTHER:
+
+        1. Remember that full screen editing is in effect in MONITOR.  You can
+cursor to a screen line, edit it, then hit RETURN.  MONITOR will accept the
+screen line as though you had typed it.  The colon can also be useful in edits.
+
+        2. Illegal commands result in a "?" being printed at the end of your
+command line. This means that the line was rejected and memory was not changed.
+
+        3. The RUN/STOP key will halt any display operation currently underway
+in MONITOR.  You do not need to hit RESTORE.
+
+        4. In addition to its 2K program space, MONITOR uses locations $26-2A,
+$61-66, and $69-6F for temporary work space, plus 24 bytes at the top of screen
+memory ($7E8-7FF). If MONITOR itself or the page 7 locations are overwritten,
+you must re-boot.  Sprite usage may overwrite the top of page 7.
