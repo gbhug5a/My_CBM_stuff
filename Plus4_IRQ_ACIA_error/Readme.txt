@@ -26,6 +26,12 @@ buffer at $0333 (819) and points the IRQ RAM vector at $0314 to $035a (858).
 The alternate code is 120 bytes long. After installing the new code, the
 BASIC program does not need to be retained in memory.
 
+In addition to fixing the bug, the replacement code also eliminates all the
+xon/xoff software flow control processing in the rom code.  That only takes up
+time, and would never be used in practice because the values used for xon and
+xoff ($11 and $13) would become illegal data bytes, which would make file
+transfers impossible.
+
 Included here are:
 
 1.  plus4irq.prg
@@ -44,3 +50,16 @@ Included here are:
 4.  Readme.txt
 
              This Readme file.
+
+PLEASE NOTE:  I no longer have a Plus/4, so this code has not been tested.
+Also, I did not address other shortcomings of the Plus/4's ACIA handling,
+such as the fact that the transmit buffer is one byte long.  And there is
+a possible problem with the 8551 chip if it does not always set bit 7 of
+the Status register when it generates an interrupt.  This was reported as
+a 6551 problem in section 3.2 here:
+
+http://csbruce.com/cbm/ftp/reference/swiftlink.txt
+
+While written for the C64, that site has extensive information about servicing
+the 6551.
+
