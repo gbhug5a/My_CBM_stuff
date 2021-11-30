@@ -1,0 +1,116 @@
+.6502
+
+;code to bypass error in +4 acia irq receive-byte routine,
+;and eliminate xon/xoff software flow control for
+;transmit and receive.
+
+.org $0333           ;object code can be moved anywhere
+                     ;  without reassembly
+                     ;sys entry to set irq vector to newirq
+                     ;sys restore (entry + 26) to restore
+		     ;  default vector
+
+entry:
+
+   sei
+   jsr   $fc55       ;just rts there
+   tsx               ;pc now in stack
+   dex
+   lda   $0100,x
+   clc
+   adc   #(newirq - entry - 3) ;point to newirq
+   sta   $0314
+   inx
+   lda   $0100,x
+   adc   #0
+   sta   $0315       ;irq vector now newirq
+   cli
+   rts               ;return from sys
+
+restore:             ;restore = entry + 26
+
+   sei               ;restore vector to $ce0e
+   lda   #$0e
+   sta   $0314
+   lda   #$ce
+   sta   $0315
+   cli
+   rts
+
+newirq:              ;$035a (858) if entry = $0333
+
+   lda   $ff09       ;not related to acia
+   and   #$02
+   beq   checkacia
+   jsr   $ce60
+
+checkacia:
+
+   bit   $07d8       ;acia present?
+   bpl   backtorom
+   lda   $fd01       ;read status reg
+   sta   $07d4       ;save status reg
+   bpl   backtorom   ;bit 7 set if acia triggered irq
+   inc   $03f0
+   bne   receive
+   inc   $03f1
+
+receive:
+
+   lda   $07d4       ;new byte received?
+   and   #$08
+   beq   transmit
+   lda   $07d4
+   and   #$f7
+   sta   $07d4
+   lda   $fd00       ;new byte
+   sta   $07d5
+
+   lda   $07d3       ;number of bytes in queue
+   cmp   #$3f
+   beq   transmit    ;discard byte if full
+
+   jsr   $eadc       ;add new byte to input queue
+
+transmit:
+
+   lda   $07d4
+   and   #$10        ;transmit buffer empty?
+   beq   backtorom
+;   lda   $fd10       ;pin k of user port = cts
+;   and   #$02
+;   beq   backtorom   ;modem says don't send
+   bit   $07ce       ;anything to send?
+   bpl   backtorom
+   ldx   #$00
+   jsr   $ea83       ;send it
+
+backtorom:
+
+   jmp   $ce2b       ;acia done, continue rest of irq
+
+
+countirq:
+
+   sei
+   lda   #$00
+   sta   $03f0
+   sta   $03f1
+   sta   $03f2
+   cli
+   
+loop:
+
+   bit   $07ce
+   bmi   loop
+   lda   #$55
+   sta   $07cd
+   sec
+   ror   $07ce
+   dec   $03f2
+   bne   loop
+
+   lda   $fd02
+   eor   #$0c
+   sta   $fd02
+   rts
