@@ -1,0 +1,46 @@
+10 rem this is new acia irq code for +4.
+15 rem the irq ram vector at ($0314)
+20 rem normally points to $ce0e.
+25 rem this code duplicates that code up
+30 rem to the acia, modifies that, then
+35 rem jumps back into rom.  the code is
+40 rem poked into the cassette buffer at
+45 rem $0333, but can be placed anywhere
+50 rem visible in ram when kernal and
+55 rem basic roms are banked in.  sys
+60 rem to the first byte to take over
+65 rem $0314. no need to re-assemble for
+70 rem a different location - the code
+75 rem detects where it has been placed.
+80 rem sys (first byte + 26) to restore
+85 rem the $0314 vector to $ce0e.
+90 rem
+100 cb = 819: rem cassette buffer $0333
+110 for i = 0 to 154
+120 read a
+130 poke cb+i,a
+140 if i = 38 then sys (cb + 26)
+150 next
+160 sys cb
+170 v= (peek(789)*256) + peek(788)
+180 print "irq ram vector now";v
+190 data 120,32,85,252,186,202,189,0
+200 data 1,24,105,36,141,20,3,232
+210 data 189,0,1,105,0,141,21,3
+220 data 88,96,120,169,14,141,20,3
+230 data 169,206,141,21,3,88,96,173
+240 data 9,255,41,2,240,3,32,96
+250 data 206,44,216,7,16,98,173,1
+260 data 253,141,212,7,41,16,240,73
+270 data 32,98,234,169,16,44,212,7
+280 data 240,27,169,15,44,216,7,240
+290 data 56,206,216,7,44,216,7,208
+300 data 48,173,2,253,41,243,9,8
+310 data 141,2,253,208,36,173,2,253
+320 data 41,243,9,4,141,2,253,162
+330 data 131,142,216,7,169,4,44,3
+340 data 253,208,5,162,3,202,208,253
+350 data 173,212,7,13,1,253,141,212
+360 data 7,173,212,7,41,8,240,8
+370 data 169,0,141,213,7,32,156,234
+380 data 76,43,206

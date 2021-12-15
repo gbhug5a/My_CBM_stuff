@@ -1,0 +1,119 @@
+.6502
+
+;bypass "beq" error in +4 acia irq receive-byte routine,
+;prevent back-to-back double interrupts on each xmit byte,
+;turn off transmit interrupts if nothing to send,
+;and now works if bit 7 of status reg fails to set on IRQ.
+
+
+.org $0333           ;object code can be moved anywhere
+                     ;  without reassembly
+                     ;sys entry to set irq vector to newirq
+                     ;sys restore (entry + 26) to restore
+		     ;  default vector
+
+entry:
+
+   sei
+   jsr   $fc55       ;just rts there
+   tsx               ;pc now in stack
+   dex
+   lda   $0100,x
+   clc
+   adc   #(newirq - entry - 3) ;point to newirq
+   sta   $0314
+   inx
+   lda   $0100,x
+   adc   #0
+   sta   $0315       ;irq vector now newirq
+   cli
+   rts               ;return from sys
+
+restore:             ;restore = entry + 26
+
+   sei               ;restore vector to $ce0e
+   lda   #$0e
+   sta   $0314
+   lda   #$ce
+   sta   $0315
+   cli
+   rts
+
+newirq:              ;$035a (858) if entry = $0333
+
+   lda   $ff09       ;raster thing not related to acia
+   and   #$02
+   beq   checkacia
+   jsr   $ce60
+
+checkacia:
+
+   bit   $07d8       ;acia present?
+   bpl   backtorom
+
+transmit:
+
+   lda   $fd01       ;read status reg
+   sta   $07d4       ;save status reg
+   and   #$10        ;transmit buffer empty?
+   beq   receive     ;no
+
+   jsr   $ea62       ;do rom xmit.  bit 4 set going in
+   lda   #$10
+   bit   $07d4       ;bit 4 now clear means a byte was sent
+   beq   enable
+
+countdown:           ;check countdown
+
+   lda   #$0f        ;count is in low nibble of $07d8
+   bit   $07d8
+   beq   receive     ;if already zero, nothing to be done
+   dec   $07d8       ;decrement count
+   bit   $07d8       ;see if zero now
+   bne   receive     ;if not, leave interrupts on
+   lda   $fd02       ;else turn off interrupts
+   and   #$f3
+   ora   #$08
+   sta   $fd02
+   bne   receive
+
+enable:
+
+   lda   $fd02       ;turn on transmit interrupts
+   and   #$f3        ;   if byte was sent
+   ora   #$04
+   sta   $fd02
+
+   ldx   #$83        ;init down-counter to 3 and set bit 7
+   stx   $07d8
+
+   lda   #$04        ;is the baud rate 1200 to 3600?
+   bit   $fd03
+   bne   readagain   ;no
+
+   ldx   #$03        ;yes, then delay for a while
+
+delay:
+
+   dex
+   bne   delay
+
+readagain:           ;read status register again
+
+   lda   $07d4       ;merge status bits from this interrupt
+   ora   $fd01       ;also clears irq again after delay
+   sta   $07d4
+
+receive:
+
+   lda   $07d4
+   and   #$08        ;received new byte?
+   beq   backtorom
+   lda   #$00        ;preload $07d5 with null
+   sta   $07d5
+   jsr   $ea9c       ;rest of receive code
+
+backtorom:
+
+   jmp   $ce2b       ;acia done, continue rest of irq
+
